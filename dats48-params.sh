@@ -19,9 +19,16 @@ dbContentPath=./database
 phpContentPath=./phpcode
 
 #Settings
-numberOfWebServers=3
-numberOfDbServers=3
-maxUn="maxscaleuser"
-maxUp="maxscalepass"
-datsUn="dats48"
-datsUp="none Ireland please"
+# numberOfWebServers=3
+# numberOfDbServers=3
+# maxUn="maxscaleuser"
+# maxUp="maxscalepass"
+# datsUn="dats48"
+# datsUp="none Ireland please"
+
+numberOfWebServers=5
+numberOfDbServers=4
+maxUn="maxscalalal"
+maxUp="maxscapassasa"
+datsUn="dutt39393"
+datsUp="nonererelease"
