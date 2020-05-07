@@ -1,0 +1,8 @@
+[mysqld]
+bind-address = 0.0.0.0
+default_storage_engine = innodb
+binlog_format = row
+
+wsrep_on = ON
+wsrep_provider = /usr/lib/galera/libgalera_smm.so
+wsrep_sst_method = rsync
