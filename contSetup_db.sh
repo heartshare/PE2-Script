@@ -50,7 +50,7 @@ functionDbWait () {
       ;;
       3)
       # galera test
-      local sqlresult=$(sudo docker exec -it db1 mysql -sN -uroot -e 'select variable_name, variable_value from information_schema.global_status where variable_name in ("wsrep_cluster_size", "wsrep_local_state_comment", "wsrep_cluster_status", "wsrep_incoming_addresses")')
+      local sqlresult=$(sudo docker exec -it $contName mysql -sN -uroot -e 'select variable_name, variable_value from information_schema.global_status where variable_name in ("wsrep_cluster_size", "wsrep_local_state_comment", "wsrep_cluster_status", "wsrep_incoming_addresses")')
       local wsrepLSC=$(echo "$sqlresult" | grep "WSREP_LOCAL_STATE_COMMENT")
       local wsrepCS=$(echo "$sqlresult" | grep "WSREP_CLUSTER_SIZE")
       if [[ ! $( echo "$wsrepLSC" | grep "Synced") == "" && ! $( echo "$wsrepCS" | grep "$numberOfDbServers") == "" ]]
@@ -60,15 +60,20 @@ functionDbWait () {
       fi
       ;;
     esac
+    contRunning=$(sudo docker inspect -f "{{.State.Running}}" $contName)
     echo -en "\r$waitString"
     local waitString+="."
-    if [[ $waitCycles -lt $maxWaits ]]
+    if [[ $waitCycles -lt $maxWaits && $contRunning == "true" ]]
     then
       #Doing another cycle
       ((waitCycles+=1))
       sleep $sleepSeconds
     else
       #Done too many cycles
+      if [[ $contRunning == "true" ]]
+      then
+        local waitString+=" crashed"
+      fi
       if [[ $restarts -lt $maxRestarts ]]
       then
         #Doing a restart
@@ -80,7 +85,7 @@ functionDbWait () {
         sleep $sleepSeconds
       else
         #Done too many restarts
-        echo "failed"
+        echo " - failed"
         return 1
       fi
     fi
@@ -106,11 +111,11 @@ functionDb () {
   -v $volPath/db1/data.d/:/var/lib/mysql \
   -v $volPath/db1/conf.d/:/etc/mysql/mariadb.conf.d \
   --env MYSQL_ROOT_PASSWORD="rootpass" $img_database \
-  --wsrep_cluster_address=gcomm:// \
-  --wsrep_node_address=dbgc0 1> $output
+  --wsrep_cluster_address=gcomm:// 1> $output
   echo "Container made: db0"
   functionEditHosts "db0"
-  functionDbWait "db0" 2 0
+  functionDbWait "db0" 1 0
+  #sudo docker stop db0
 
   # Setting up db2-dbx
   # Removing trailing comma from gcommString
@@ -123,34 +128,35 @@ functionDb () {
     -v $volPath/db$i/conf.d/:/etc/mysql/mariadb.conf.d \
     -v /etc/hosts:/etc/hosts \
     --env MYSQL_ROOT_PASSWORD="rootpass" \
-    $img_database --wsrep_cluster_address=gcomm://$gcommString \
-    --wsrep_node_address=dbgc$i 1> $output
+    $img_database --wsrep_cluster_address=gcomm://$gcommString 1> $output
     echo "Container made: db$i"
-    functionEditHosts "db$i"
     bootstrapNames+="db$i "
+    #sudo docker container wait db$i
+    #sudo docker stop db$i
+    #functionDbWait "db$i" 2 4 5
   done
-  # Containers db2 ++ is prob gonna stop here
-  echo -en "\rWaiting for the containers to stop..."
-  sudo docker container wait $bootstrapNames 1> $output
-  sudo docker stop db0 1> /dev/null
-  sudo docker container wait db0 1> $output
-  echo " / done"
-  sudo grep -q "safe_to_bootstrap" $volPath/db1/data.d/grastate.dat \
-  && sudo sed -i '/safe_to_bootstrap^/c\safe_to_bootstrap: 1' $volPath/db1/data.d/grastate.dat \
-  || sudo sed -i '$ a safe_to_bootstrap: 1' $volPath/db1/data.d/grastate.dat
+  echo -en "\rWaiting for database-containers to halt..."
+  sudo docker stop db0 1> $output
+  sudo docker container wait db0 $bootstrapNames 1> $output
+  sudo sed -i 's/^safe_to_bootstrap.*/safe_to_bootstrap: 1/' $volPath/db1/data.d/grastate.dat
   sudo truncate -s 0 $(sudo docker inspect --format='{{.LogPath}}' db0)
+  echo -e " done!\nStarting db0 again and getting ready to bootstrap"
   sudo docker start db0 1> $output
-  functionDbWait "db0" 2 0 10
-  echo "Starting all other db-containers again"
+  functionDbWait "db0" 2 0 20
+
   for((i=2; i<=$numberOfDbServers; i++))
   do
     sudo docker start db$i 1> $output
-    sleep 2
+    functionDbWait "db$i" 2 0 30
+    functionEditHosts "db$i"
   done
 
+  echo "Checking galera cluster status: "
+  functionDbWait "db0" 3 0 20
 
   echo "Removing bootstrap container db0"
-  sudo docker kill db0 &> /dev/null || true
+  sudo docker kill -s 15 db0 &> /dev/null || true
+  sudo docker container wait db0
   sudo docker rm db0 1> $output
   echo "   -- [db1]"
   sudo docker run -d --name db1 --net bridge --hostname dbgc1 \
@@ -158,26 +164,15 @@ functionDb () {
   -v $volPath/db1/conf.d/:/etc/mysql/mariadb.conf.d \
   -v /etc/hosts:/etc/hosts \
   --env MYSQL_ROOT_PASSWORD="rootpass" \
-  $img_database --wsrep_cluster_address=gcomm://$gcommString \
-  --wsrep_node_address=dbgc1 1> $output
+  $img_database --wsrep_cluster_address=gcomm://$gcommString 1> $output
   bootstrapNames=$(echo "$bootstrapNames" | sed 's/db0/db1/g')
   echo "Container made: db1"
   functionEditHosts "db1"
 
-  functionDbWait "db1" 1 0 20
-  if [[ $? -eq 1 ]]
-  then
-    echo "Problems occurred, restarting db containers to give it another chance"
-    sudo docker stop db1 $bootstrapNames 1> $output || true
-    for((i=1; i<=$numberOfDbServers; i++))
-    do
-      sudo docker start db$i 1> $output
-      sleep 1
-    done
-  fi
+  functionDbWait "db1" 1 0 30
+
   functionDbWait "db1" 3 0 20
-  res=$?
-  return $res
+  return $?
 }
 
 waitMultiplier=1
@@ -194,7 +189,7 @@ do
     then
       # doing another attempt at setting them up
       ((waitMultiplier+=1))
-      echo -e " trying to setup databases again, giving it x$waitMultiplier more time\n\n"
+      echo -e " trying to setup databases again, giving it x$waitMultiplier more time\n\n "
     else
       # too many attempts, aborting
       echo " failed setting up databases... aborting script"
