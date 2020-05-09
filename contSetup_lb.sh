@@ -5,9 +5,9 @@ source global_functions.sh
 
 echo "   - Haproxy" # Loadbalancer
 # Checks if it exists, deletes container and image
-functionKillAndDeleteContainer "lb"
-sudo docker run --name lb --hostname haproxy \
--v $volPath/lb/conf.d/:/usr/local/etc/haproxy:ro \
--v /etc/hosts:/etc/hosts -p 80:80 --net bridge -d $img_loadbalancer  1> $output
-echo "Container made: lb"
-functionEditHosts "lb"
+functionKillAndDeleteContainer "$lb_name"
+sudo docker run --name $lb_name --hostname $lb_hostn \
+-v $volPath/${lb_dir}/conf.d/:/usr/local/etc/haproxy:ro \
+-v /etc/hosts:/etc/hosts -p 80:80 --net $lb_net -d $img_loadbalancer  1> $output
+echo "Container made: $lb_name"
+functionEditHosts "$lb_name"

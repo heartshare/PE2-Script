@@ -99,79 +99,76 @@ functionDb () {
   for((i=0; i<=$numberOfDbServers; i++))
   do
     # Deletes existing containers and db-data folders content
-    sudo sed -i "/dbgc$i/d" /etc/hosts
-    functionKillAndDeleteContainer "db$i"
-    sudo rm -rf $volPath/db$i/data.d/*
-    gcommString+="dbgc$i," # Builds the string
+    sudo sed -i "/${db_hostn}${i}/d" /etc/hosts
+    functionKillAndDeleteContainer "${db_name}${i}"
+    sudo rm -rf $volPath/${db_dir}${i}/data.d/*
+    gcommString+="${db_hostn}${i}," # Builds the string
   done
 
-  echo "   -- [db0]" # Setting up db0
+  echo "   -- [${db_name}0]" # Setting up ${db_name}0
   # Removing trailing comma from gcommString
-  sudo docker run -d --name db0 --net bridge --hostname dbgc0 \
-  -v $volPath/db1/data.d/:/var/lib/mysql \
-  -v $volPath/db1/conf.d/:/etc/mysql/mariadb.conf.d \
-  --env MYSQL_ROOT_PASSWORD="rootpass" $img_database \
+  sudo docker run -d --name ${db_name}0 --net $db_net --hostname ${db_hostn}0 \
+  -v $volPath/${db_dir}1/data.d/:/var/lib/mysql \
+  -v $volPath/${db_dir}1/conf.d/:/etc/mysql/mariadb.conf.d \
+  --env MYSQL_ROOT_PASSWORD="$rootPass" $img_database \
   --wsrep_cluster_address=gcomm:// 1> $output
-  echo "Container made: db0"
-  functionEditHosts "db0"
-  functionDbWait "db0" 1 0
-  #sudo docker stop db0
+  echo "Container made: ${db_name}0"
+  functionEditHosts "${db_name}0"
+  functionDbWait "${db_name}0" 1 0
 
   # Setting up db2-dbx
   # Removing trailing comma from gcommString
   gcommString=$(echo "$gcommString" | sed 's/\(.*\),/\1 /')
   for((i=2; i<=$numberOfDbServers; i++))
   do
-    echo "   -- [db$i]"
-    sudo docker run -d --name db$i --net bridge --hostname dbgc$i \
-    -v $volPath/db$i/data.d/:/var/lib/mysql \
-    -v $volPath/db$i/conf.d/:/etc/mysql/mariadb.conf.d \
+    echo "   -- [${db_name}$i]"
+    sudo docker run -d --name ${db_name}${i} --net $db_net --hostname ${db_hostn}${i} \
+    -v $volPath/${db_dir}${i}/data.d/:/var/lib/mysql \
+    -v $volPath/${db_dir}${i}/conf.d/:/etc/mysql/mariadb.conf.d \
     -v /etc/hosts:/etc/hosts \
-    --env MYSQL_ROOT_PASSWORD="rootpass" \
+    --env MYSQL_ROOT_PASSWORD="$rootPass" \
     $img_database --wsrep_cluster_address=gcomm://$gcommString 1> $output
-    echo "Container made: db$i"
-    bootstrapNames+="db$i "
-    #sudo docker container wait db$i
-    #sudo docker stop db$i
-    #functionDbWait "db$i" 2 4 5
+    echo "Container made: ${db_name}${i}"
+    bootstrapNames+="${db_name}${i} "
   done
+
   echo -en "\rWaiting for database-containers to halt..."
-  sudo docker stop db0 1> $output
-  sudo docker container wait db0 $bootstrapNames 1> $output
-  sudo sed -i 's/^safe_to_bootstrap.*/safe_to_bootstrap: 1/' $volPath/db1/data.d/grastate.dat
-  sudo truncate -s 0 $(sudo docker inspect --format='{{.LogPath}}' db0)
-  echo -e " done!\nStarting db0 again and getting ready to bootstrap"
-  sudo docker start db0 1> $output
-  functionDbWait "db0" 2 0 20
+  sudo docker stop ${db_name}0 1> $output
+  sudo docker container wait ${db_name}0 $bootstrapNames 1> $output
+  sudo sed -i 's/^safe_to_bootstrap.*/safe_to_bootstrap: 1/' $volPath/${db_dir}1/data.d/grastate.dat
+  sudo truncate -s 0 $(sudo docker inspect --format='{{.LogPath}}' ${db_name}0)
+  echo -e " done!\nStarting ${db_name}0 again and getting ready to bootstrap"
+  sudo docker start ${db_name}0 1> $output
+  functionDbWait "${db_name}0" 2 0 20
 
   for((i=2; i<=$numberOfDbServers; i++))
   do
-    sudo docker start db$i 1> $output
-    functionDbWait "db$i" 2 0 30
-    functionEditHosts "db$i"
+    sudo docker start ${db_name}${i} 1> $output
+    functionDbWait "${db_name}${i}" 2 0 30
+    functionEditHosts "${db_name}${i}"
   done
 
   echo "Checking galera cluster status: "
-  functionDbWait "db0" 3 0 20
+  functionDbWait "${db_name}0" 3 0 20
 
-  echo "Removing bootstrap container db0"
-  sudo docker kill -s 15 db0 &> /dev/null || true
-  sudo docker container wait db0
-  sudo docker rm db0 1> $output
-  echo "   -- [db1]"
-  sudo docker run -d --name db1 --net bridge --hostname dbgc1 \
-  -v $volPath/db1/data.d/:/var/lib/mysql \
-  -v $volPath/db1/conf.d/:/etc/mysql/mariadb.conf.d \
+  echo "Removing bootstrap container ${db_name}0"
+  sudo docker kill -s 15 ${db_name}0 &> /dev/null || true
+  sudo docker container wait ${db_name}0 1> $output
+  sudo docker rm ${db_name}0 1> $output
+  echo "   -- [${db_name}1]"
+  sudo docker run -d --name ${db_name}1 --net $db_net --hostname ${db_hostn}1 \
+  -v $volPath/${db_dir}1/data.d/:/var/lib/mysql \
+  -v $volPath/${db_dir}1/conf.d/:/etc/mysql/mariadb.conf.d \
   -v /etc/hosts:/etc/hosts \
-  --env MYSQL_ROOT_PASSWORD="rootpass" \
+  --env MYSQL_ROOT_PASSWORD="$rootPass" \
   $img_database --wsrep_cluster_address=gcomm://$gcommString 1> $output
-  bootstrapNames=$(echo "$bootstrapNames" | sed 's/db0/db1/g')
-  echo "Container made: db1"
-  functionEditHosts "db1"
+  #bootstrapNames=$(echo "$bootstrapNames" | sed "s/${db_name}0/${db_name}1/g")
+  echo "Container made: ${db_name}1"
+  functionEditHosts "${db_name}1"
 
-  functionDbWait "db1" 1 0 30
+  functionDbWait "${db_name}1" 1 0 30
 
-  functionDbWait "db1" 3 0 20
+  functionDbWait "${db_name}1" 3 0 20
   return $?
 }
 

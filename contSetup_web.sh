@@ -9,12 +9,12 @@ do
   # For each web server:
   # checks if it already exists and deletes
   # then creates it and adds it to hosts file
-  functionKillAndDeleteContainer "web$i"
-  sudo docker run --name web$i --hostname web$i -d \
-  -v $volPath/web$i/html:/var/www/html:ro \
+  functionKillAndDeleteContainer "$web_name$i"
+  sudo docker run --name ${web_name}${i} --hostname ${web_hostn}${i} -d \
+  -v $volPath/${web_dir}${i}/html:/var/www/html:ro \
   -v /etc/hosts:/etc/hosts \
-  --net bridge \
+  --net $web_net \
   $img_webserver 1> $output
-  echo "Container made: web$i"
-  functionEditHosts "web$i"
+  echo "Container made: ${web_name}${i}"
+  functionEditHosts "${web_name}${i}"
 done
