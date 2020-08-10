@@ -3,11 +3,13 @@
 source dats48-params.sh
 
 echo -en "\n\r   - Filling database with data"
+# Applying the SQL file setting up the database
 sudo cp ./${dbContentPath}/studentinfo-db.sql $volPath/${db_dir}1/data.d/studentinfo-db.sql
 sudo docker exec -it ${db_name}1 mysql -uroot -e "source /var/lib/mysql/studentinfo-db.sql"
 echo -e " / done!"
 
 echo -en "\r   - Updating some config and other files"
+# Updating the DB username and password in each of the webservers php files
 for((i=1;i<=$numberOfWebServers;i++))
 do
   sudo sed -i "s/USERNAME/$datsUn/g" $volPath/${web_dir}${i}/html/include/dbconnection.php
@@ -17,10 +19,10 @@ done
 
 echo -e " / done!"
 
-
+# Retrieving the subnet ID to apply subnet restricted IP sets to each of the accounts
 subnet=$(sudo docker network inspect --format='{{ range .IPAM.Config}}{{.Subnet}}{{end}}' $db_net)
 subnetIp=$(echo "$subnet" | sed 's#.\/.*$#%#')
-echo -en "\r   - Adding maxscaleuser and dats user, restricted to IP $subnet"
+echo -en "\r   - Adding $maxUn and $datsUn db-user, restricted to IP $subnet"
 sudo docker exec -it ${db_name}1 mysql -s -uroot -e "CREATE USER '$maxUn'@'$subnetIp' IDENTIFIED BY '$maxUp'"
 sudo docker exec -it ${db_name}1 mysql -s -uroot -e "grant select on mysql.* to '$maxUn'@'$subnetIp'"
 sudo docker exec -it ${db_name}1 mysql -s -uroot -e "grant replication slave on *.* to '$maxUn'@'$subnetIp'"

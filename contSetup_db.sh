@@ -7,6 +7,8 @@ source global_functions.sh
 dbTotalRetries=0
 galeraRetries=0
 
+# functionDbWait is a function used several times in this file to check the status of a DB container.
+# the function has 3 different ways to checking db-server-status which are in the case/switch below
 functionDbWait () {
   #1 Param: Name of container to wait for
   local contName=$1
@@ -17,15 +19,17 @@ functionDbWait () {
   local method=$2
   #3 Param: Number of restarts to attempt
   local maxRestarts=$3
-  #4 Param[opt]: Number of cycles to wait
+  #4 Param[opt]: Number of cycles to wait (default 5)
   local maxWaits=${4:-5}
   local maxWaits=$(($maxWaits * $waitMultiplier))
 
+  # Number of seconds this funtion sleeps for each cycle
   local sleepSeconds=2
+
   local restarts=0
   local waitCycles=0
-
   local waitString="Waiting for $contName to be ready."
+
   while :
   do
     # The check if db is ok, return 0 if ok
@@ -40,7 +44,7 @@ functionDbWait () {
       fi
       ;;
       2)
-      # sync test
+      # "ready for connections" log test
       local log=$( sudo docker logs $contName 2>&1 | grep "Synchronized with group, ready for connections" ) || true
       if [[ ! $log == "" ]]
       then
@@ -49,7 +53,7 @@ functionDbWait () {
       fi
       ;;
       3)
-      # galera test
+      # galera cluster status test
       local sqlresult=$(sudo docker exec -it $contName mysql -sN -uroot -e 'select variable_name, variable_value from information_schema.global_status where variable_name in ("wsrep_cluster_size", "wsrep_local_state_comment", "wsrep_cluster_status", "wsrep_incoming_addresses")')
       local wsrepLSC=$(echo "$sqlresult" | grep "WSREP_LOCAL_STATE_COMMENT")
       local wsrepCS=$(echo "$sqlresult" | grep "WSREP_CLUSTER_SIZE")
@@ -94,7 +98,7 @@ functionDbWait () {
 
 functionDb () {
   echo "   - Databases" # Database-servers
-  gcommString="" # String thats later used for dbproxy setup
+  gcommString="" # String with hostnames of servers part of the cluster
   bootstrapNames="" # String of containers to stop/start/restart
   for((i=0; i<=$numberOfDbServers; i++))
   do
@@ -116,9 +120,9 @@ functionDb () {
   functionEditHosts "${db_name}0"
   functionDbWait "${db_name}0" 1 0
 
-  # Setting up db2-dbx
   # Removing trailing comma from gcommString
   gcommString=$(echo "$gcommString" | sed 's/\(.*\),/\1 /')
+  # Setting up db2-dbx
   for((i=2; i<=$numberOfDbServers; i++))
   do
     echo "   -- [${db_name}$i]"
@@ -132,6 +136,7 @@ functionDb () {
     bootstrapNames+="${db_name}${i} "
   done
 
+  # Bootstrapping
   echo -en "\rWaiting for database-containers to halt..."
   sudo docker stop ${db_name}0 1> $output
   sudo docker container wait ${db_name}0 $bootstrapNames 1> $output
@@ -141,6 +146,7 @@ functionDb () {
   sudo docker start ${db_name}0 1> $output
   functionDbWait "${db_name}0" 2 0 20
 
+  # Starting up the other db-containers to sync and become part of cluster
   for((i=2; i<=$numberOfDbServers; i++))
   do
     sudo docker start ${db_name}${i} 1> $output
@@ -171,6 +177,13 @@ functionDb () {
   functionDbWait "${db_name}1" 3 0 20
   return $?
 }
+
+# Everything is put into a method above so the whole setup can run
+# and the status be tested at the end (below). If the setup completes
+# with an error, the whole setup restarts with added delay in waiting-
+# cycles. The thought is that if the server is really slow, this
+# could allow for another attempt for successfully seting up the
+# cluster 
 
 waitMultiplier=1
 while :

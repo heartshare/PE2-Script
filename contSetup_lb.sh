@@ -4,7 +4,6 @@ source dats48-params.sh
 source global_functions.sh
 
 echo "   - Haproxy" # Loadbalancer
-# Checks if it exists, deletes container and image
 functionKillAndDeleteContainer "$lb_name"
 sudo docker run --name $lb_name --hostname $lb_hostn \
 -v $volPath/${lb_dir}/conf.d/:/usr/local/etc/haproxy:ro \

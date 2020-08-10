@@ -1,5 +1,6 @@
 #!/bin/bash
 #setup_all.sh
+cd $(dirname $0)
 
 echo ""
 echo " ########################"

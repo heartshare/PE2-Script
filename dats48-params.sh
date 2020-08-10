@@ -7,12 +7,15 @@ img_loadbalancer=haproxy:latest
 img_database=mariadb:10.4
 img_dbproxy=mariadb/maxscale:latest
 
-#Container names
+# ######################################################
+# Container names
+
 # WEB
 web_name=web # webX
 web_hostn=web #webX
 web_dir=web
 web_net=bridge
+
 # LOAD-BALANCER
 lb_name=lb
 lb_hostn=haproxy
@@ -22,11 +25,13 @@ lb_net=bridge
 # already run once. There can not be two containers having port 80 exposed
 # at the same time, and the script will not find, stop and delete the old
 # loadbalancer-container
+
 # DATABASE
 db_name=db # dbX
 db_hostn=dbgc # dgbcX
 db_dir=db # dbX
 db_net=bridge
+
 # DATABASE PROXY
 dbproxy_name=dbproxy
 dbproxy_hostn=maxscale # do not touch
@@ -36,16 +41,19 @@ dbproxy_net=bridge
 # hostname reference to the dbproxy and the php files are
 # not supposed to be changed on this spesific line
 
-#Output in console. Choose if you only want echos
-# or all command outputs. Uncomment you choice
+# container names config finished
+# ########################################################
+
+# Output in console. Choose if you only want echos
+# or all command outputs. Uncomment your choice:
 output=/dev/null #for only echos
 #output=/dev/stdout #command outputs aswell
 
 #Directories
-configSource=./configs_m
-volPath=/volumes
-dbContentPath=./database
-phpContentPath=./phpcode
+configSource=./configs_m # Where to find config files
+volPath=${HOME}/volumes # Where to put volumes folder 
+dbContentPath=./database # Folder where db-sql file is located
+phpContentPath=./phpcode # PHP files for webserver
 
 #Settings
 numberOfWebServers=3

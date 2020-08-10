@@ -5,7 +5,7 @@ source dats48-params.sh
 # //////////////////////////////////////////////////////////////////////////////
 # By providing the container-name as a parameter this function
 # -finds ip and hostname of the container
-# -adds the container with hostname and IP to /etc/hosts file
+# -adds the container with hostname and IP to local /etc/hosts file
 functionEditHosts () {
   # Param #1: Name of container
   local contName=$1

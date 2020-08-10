@@ -46,7 +46,7 @@ functionCreateConfigs () {
   done
 
   echo "   - finalizing..." # finishing maxscale config
-  # Putting together the maxscale config with the already made [dbX] blocks with
+  # Putting together the maxscale config of the already made [dbX] blocks with
   # the rest of the config
   check=$(cat $volPath/${dbproxy_dir}/conf.d/maxscale.cnf)
   cat $volPath/${dbproxy_dir}/conf.d/maxscale.cnf $configSource/maxscale.cnf \
@@ -62,13 +62,15 @@ functionCreateConfigs () {
 }
 
 configTries=0
+# Had a bug where sometimes the script above would not produce a propper maxscale config.
+# This bug was really hard to reproduce and happend very rarely. Therefore this script
+# checks if the bug has happend (bug being that the db-definition at the top of maxscale
+# config got replaced with the second part of the config) and re-runs it. In testing, the
+# bug never happend twice in a row
 while [[ $(cat $volPath/${dbproxy_dir}/conf.d/maxscale.cnf | grep "$db_hostn") == "" && configTries -lt 2 ]]
 do
   functionCreateConfigs
   ((configTries+=1))
 done
-if [[ $(cat $volPath/${dbproxy_dir}/conf.d/maxscale.cnf | grep "$db_hostn") == "" && configTries -gt 1 ]]
-then
-  exit
-fi
+
 echo "   # Configuration files complete!"
